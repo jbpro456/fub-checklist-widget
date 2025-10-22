@@ -7,6 +7,7 @@ FUB_API_BASE = "https://api.followupboss.com/v1"
 FUB_API_KEY = os.environ.get("FUB_API_KEY", "")
 EMBED_SECRET = os.environ.get("EMBED_SECRET", "")
 
+
 FIELD_KEYS = {
     "sentPropertyListAt": "customSentPropertyListAt",
     "appointmentSetAt": "customAppointmentSetAt",
@@ -33,18 +34,37 @@ def verify_signature(context_b64: str, signature: str) -> bool:
     return s == hex_sig.lower() or s == b64_sig.lower()
 
 def fub_headers():
-    token = base64.b64encode(f"{FUB_API_KEY}:".encode("utf-8")).decode("utf-8")
-    return {"Authorization": f"Basic {token}", "Content-Type": "application/json"}
+    """
+    FUB requires HTTP Basic auth with base64("API_KEY:") as the token.
+    Do NOT send the raw key. Always encode "key:" (with the colon).
+    """
+    if not FUB_API_KEY:
+        raise RuntimeError("FUB_API_KEY not set in environment")
+    basic = base64.b64encode(f"{FUB_API_KEY}:".encode("utf-8")).decode("utf-8")
+    return {
+        "Authorization": f"Basic {basic}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        # Optional: shows up in FUB logs
+        "X-System": "FUB Checklist Widget",
+    }
 
 def fub_get(path: str):
-    r = requests.get(FUB_API_BASE + path, headers=fub_headers(), timeout=20)
-    r.raise_for_status()
+    url = FUB_API_BASE + path
+    r = requests.get(url, headers=fub_headers(), timeout=20)
+    if r.status_code >= 300:
+        print(f"[FUB GET {url}] {r.status_code} {r.text}")
+        r.raise_for_status()
     return r.json() if r.text else {}
 
 def fub_put(path: str, body: dict):
-    r = requests.put(FUB_API_BASE + path, headers=fub_headers(), data=json.dumps(body), timeout=20)
-    r.raise_for_status()
+    url = FUB_API_BASE + path
+    r = requests.put(url, headers=fub_headers(), data=json.dumps(body), timeout=20)
+    if r.status_code >= 300:
+        print(f"[FUB PUT {url}] {r.status_code} {r.text}")
+        r.raise_for_status()
     return r.json() if r.text else {}
+
 
 @app.after_request
 def add_headers(resp):
@@ -89,12 +109,25 @@ def toggle():
     person_id = data.get("personId")
     key = data.get("key")
     check = bool(data.get("check"))
+
+    FIELD_KEYS = {
+        "sentPropertyListAt": "customSentPropertyListAt",
+        "appointmentSetAt": "customAppointmentSetAt",
+        "buyerCriteriaCollectedAt": "customBuyerCriteriaCollectedAt",
+        "qualificationQuestionsCompletedAt": "customQualificationQuestionsCompletedAt",
+    }
+
     if not person_id or key not in FIELD_KEYS:
         return jsonify({"ok": False, "error": "Bad payload"}), 400
-    field = FIELD_KEYS[key]
-    body = {field: datetime.now(timezone.utc).isoformat() if check else ""}
-    fub_put(f"/people/{person_id}", body)
-    return jsonify({"ok": True, "at": body[field]})
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
+    field = FIELD_KEYS[key]
+    value = datetime.now(timezone.utc).isoformat() if check else ""
+    body = {field: value}
+
+    try:
+        fub_put(f"/people/{person_id}", body)
+        return jsonify({"ok": True, "at": value})
+    except Exception as e:
+        # This message shows in Render → Logs
+        print(f"[TOGGLE ERROR] person={person_id} key={key} body={body} err={e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
