@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://eia.followupboss.com/embeddedApps-v1.0.1.js"></script>
+  <style>
+    :root { --b:#e5e7eb; --fg:#111827; --muted:#6b7280; --ok:#047857; --warn:#b91c1c; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; padding:14px; color:var(--fg); }
+    .card { border:1px solid var(--b); border-radius:14px; padding:14px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+    h2 { margin:0 0 10px; font-size:16px; }
+    .item { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px dashed var(--b); }
+    .item:last-child { border-bottom:0; }
+    .left { display:flex; align-items:center; gap:10px; }
+    .cb{width:18px;height:18px;border:2px solid var(--b);border-radius:6px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:#fff;user-select:none}
+    .cb[data-checked="true"] { background:#111827; border-color:#111827; color:#fff; }
+    .label { font-size:14px; }
+    .meta { font-size:12px; color:var(--muted); margin-left:6px; white-space:nowrap; }
+    .row { display:flex; gap:8px; margin-top:10px; }
+    button { border:none; border-radius:10px; padding:8px 10px; cursor:pointer; }
+    .ghost { background:#f3f4f6; }
+    .danger { background:#fee2e2; color:#991b1b; }
+    .msg { font-size:12px; margin-top:8px; color:var(--muted); }
+    .ok { color:var(--ok); }
+    .err { color:var(--warn); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Lead Checklist</h2>
+
+    <div class="item" data-key="sentPropertyListAt">
+      <div class="left"><div class="cb" role="checkbox" aria-label="Sent Property List" tabindex="0"></div><div class="label">Sent Property List</div></div>
+      <div class="meta"></div>
+    </div>
+
+    <div class="item" data-key="appointmentSetAt">
+      <div class="left"><div class="cb" role="checkbox" aria-label="Appointment Set" tabindex="0"></div><div class="label">Appointment Set</div></div>
+      <div class="meta"></div>
+    </div>
+
+    <div class="item" data-key="buyerCriteriaCollectedAt">
+      <div class="left"><div class="cb" role="checkbox" aria-label="Buyer Criteria Collected" tabindex="0"></div><div class="label">Buyer Criteria Collected</div></div>
+      <div class="meta"></div>
+    </div>
+
+    <div class="item" data-key="qualificationQuestionsCompletedAt">
+      <div class="left"><div class="cb" role="checkbox" aria-label="Qualification Questions Completed" tabindex="0"></div><div class="label">Qualification Questions Completed</div></div>
+      <div class="meta"></div>
+    </div>
+
+    <div class="row">
+      <button class="ghost" id="markAll">Mark All Done</button>
+      <button class="danger" id="clearAll">Clear All</button>
+    </div>
+    <div id="msg" class="msg"></div>
+  </div>
+
+  <script>
+    const model = { personId: "<?= personId ?>", values: <?= tojson(values) ?> };
+    const items = document.querySelectorAll('.item');
+
+    function applyState(el, iso){
+      const cb = el.querySelector('.cb');
+      const checked = !!iso;
+      cb.setAttribute('data-checked', checked ? 'true' : 'false');
+      cb.textContent = checked ? '✓' : '';
+      el.querySelector('.meta').textContent = checked ? pretty(iso) : '';
+    }
+    function pretty(iso){ try{ const d=new Date(iso); return `on ${d.toLocaleString()}` }catch{ return '' } }
+    function setMsg(t,ok){ const m=document.getElementById('msg'); m.textContent=t||''; m.className= ok? 'msg ok' : (t?'msg err':'msg'); }
+
+    items.forEach(el=>{
+      const key = el.dataset.key;
+      applyState(el, model.values[key] || '');
+      const cb = el.querySelector('.cb');
+      const toggle = () => {
+        const isChecked = cb.getAttribute('data-checked') === 'true';
+        if(isChecked && !confirm('Uncheck and clear timestamp?')) return;
+        setMsg(isChecked?'Updating…':'Saving…');
+        fetch('/toggle', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ personId: model.personId, key, check: !isChecked })
+        }).then(r=>r.json()).then(res=>{
+          applyState(el, res.at||'');
+          setMsg('Saved ✔', true);
+        }).catch(()=> setMsg('Error saving', false));
+      };
+      cb.addEventListener('click', toggle);
+      cb.addEventListener('keydown', e => { if(e.key===' '||e.key==='Enter'){ e.preventDefault(); toggle(); } });
+    });
+
+    markAll.onclick = () => items.forEach(el=>{
+      const key = el.dataset.key;
+      const cb = el.querySelector('.cb');
+      if (cb.getAttribute('data-checked')==='true') return;
+      fetch('/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({personId:model.personId,key,check:true})});
+      applyState(el, new Date().toISOString());
+    });
+
+    clearAll.onclick = () => {
+      if(!confirm('Clear ALL timestamps?')) return;
+      items.forEach(el=>{
+        const key = el.dataset.key;
+        fetch('/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({personId:model.personId,key,check:false})});
+        applyState(el, '');
+      });
+    };
+  </script>
+</body>
+</html>
