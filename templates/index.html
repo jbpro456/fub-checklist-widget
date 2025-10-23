@@ -57,7 +57,7 @@
   </div>
 
   <script>
-    const model = { personId: "<?= personId ?>", values: <?= tojson(values) ?> };
+    const model = { personId: {{ personId|tojson }}, values: {{ values|tojson }} };
     const items = document.querySelectorAll('.item');
 
     function applyState(el, iso){
@@ -110,3 +110,4 @@
   </script>
 </body>
 </html>
+fix jinja variable rendering
