@@ -12,7 +12,7 @@
     .row:first-child { border-top: 0; }
     .left { display: flex; align-items: center; gap: 10px; }
     input[type="checkbox"] { width: 18px; height: 18px; }
-    .ts { color: #6b7280; font-size: 12px; min-width: 160px; text-align: right; }
+    .ts { color: #6b7280; font-size: 12px; min-width: 170px; text-align: right; }
     .btns { display: flex; gap: 10px; margin-top: 14px; }
     button { border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
     .primary { background: #111827; color: #fff; }
@@ -34,7 +34,7 @@
   </div>
 
   <script>
-    // Render injects these:
+    // Injected by Flask
     const personId = {{ personId | tojson }};
     const initial  = {{ values   | tojson }};
 
@@ -50,7 +50,7 @@
     function fmt(iso) {
       if (!iso) return '';
       const d = new Date(iso);
-      return d.toLocaleString(); // your local timezone
+      return d.toLocaleString();
     }
 
     function flash(text, isError=false){
@@ -76,8 +76,7 @@
         initial[key] = check ? data.at : '';
         flash('Saved');
       }catch(err){
-        // Revert checkbox on failure
-        cbEl.checked = !check;
+        cbEl.checked = !check; // revert on error
         flash(err.message || 'Error', true);
         console.error('toggle error', err);
       }
